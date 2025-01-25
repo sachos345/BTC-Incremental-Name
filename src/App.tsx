@@ -106,17 +106,67 @@ function App() {
   // Save system
   useEffect(() => {
     const interval = setInterval(() => {
+      setState((prev) => {
+        const newState = {
+          ...prev,
+          lastSaved: Date.now(), // Update lastSaved when saving
+        };
+        localStorage.setItem(
+          "btcClickerSave",
+          JSON.stringify({
+            ...newState,
+            sats: newState.sats.toString(),
+            hashrate: newState.hashrate.toString(),
+            combo: { multiplier: 1, timeout: null },
+          })
+        );
+        return newState;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+  // Offline earnings calculation to use saved hashrate
+  useEffect(() => {
+    const saved = localStorage.getItem("btcClickerSave");
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+      const savedHashrate = new Decimal(parsed.hashrate || 0);
+      const savedTime = parsed.lastSaved || Date.now();
+
+      // Calculate time difference with minimum 1 second threshold
+      const rawOfflineTime = Date.now() - savedTime;
+      const offlineTime = Math.max(rawOfflineTime - 1000, 0);
+
+      const baseEarnings = savedHashrate.times(offlineTime / 1000);
+
+      setState((prev) => ({
+        ...prev,
+        sats: prev.sats.plus(baseEarnings),
+        lastSaved: Date.now(), // Reset timer after claiming
+      }));
+    } catch (error) {
+      console.error("Error loading saved data:", error);
+    }
+  }, []);
+  // Beforeunload handler to update lastSaved instantly
+  useEffect(() => {
+    const handleBeforeUnload = () => {
       localStorage.setItem(
         "btcClickerSave",
         JSON.stringify({
           ...state,
           sats: state.sats.toString(),
           hashrate: state.hashrate.toString(),
+          lastSaved: Date.now(), // Critical update
           combo: { multiplier: 1, timeout: null },
         })
       );
-    }, 500);
-    return () => clearInterval(interval);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [state]);
 
   // Passive income
