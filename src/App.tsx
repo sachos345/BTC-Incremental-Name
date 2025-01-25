@@ -106,70 +106,68 @@ function App() {
   ]);
 
   // Save system
+  // Unified save and visibility handler
   useEffect(() => {
-    const interval = setInterval(() => {
-      setState((prev) => {
-        const newState = {
-          ...prev,
-          lastSaved: Date.now(), // Update lastSaved when saving
-        };
-        localStorage.setItem(
-          "btcClickerSave",
-          JSON.stringify({
-            ...newState,
-            sats: newState.sats.toString(),
-            hashrate: newState.hashrate.toString(),
-            combo: { multiplier: 1, timeout: null },
-          })
-        );
-        return newState;
-      });
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
-  // Offline earnings calculation to use saved hashrate
-  useEffect(() => {
-    const saved = localStorage.getItem("btcClickerSave");
-    if (!saved) return;
-
-    try {
-      const parsed = JSON.parse(saved);
-      const savedHashrate = new Decimal(parsed.hashrate || 0);
-      const savedTime = parsed.lastSaved || Date.now();
-
-      // Calculate time difference with minimum 1 second threshold
-      const rawOfflineTime = Date.now() - savedTime;
-      const offlineTime = Math.max(rawOfflineTime - 1000, 0);
-
-      const baseEarnings = savedHashrate.times(offlineTime / 1000);
-
-      setState((prev) => ({
-        ...prev,
-        sats: prev.sats.plus(baseEarnings),
-        lastSaved: Date.now(), // Reset timer after claiming
-      }));
-    } catch (error) {
-      console.error("Error loading saved data:", error);
-    }
-  }, []);
-  // Beforeunload handler to update lastSaved instantly
-  useEffect(() => {
-    const handleBeforeUnload = () => {
+    const saveState = (timestamp: number) => {
       localStorage.setItem(
         "btcClickerSave",
         JSON.stringify({
           ...state,
           sats: state.sats.toString(),
           hashrate: state.hashrate.toString(),
-          lastSaved: Date.now(), // Critical update
+          lastSaved: timestamp,
           combo: { multiplier: 1, timeout: null },
         })
       );
     };
 
+    const handleVisibilityChange = () => {
+      const now = Date.now();
+      if (document.visibilityState === "hidden") {
+        saveState(now);
+        setState((prev) => ({ ...prev, lastSaved: now }));
+      } else {
+        const offlineTime = Math.max(now - state.lastSaved - 1000, 0);
+        setState((prev) => ({
+          ...prev,
+          sats: prev.sats.plus(effectiveHashrate.times(offlineTime / 1000)),
+          lastSaved: now,
+        }));
+      }
+    };
+
+    const handleBeforeUnload = () => saveState(Date.now());
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [state]);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [state, effectiveHashrate]);
+
+  // Initial load offline earnings
+  useEffect(() => {
+    const saved = localStorage.getItem("btcClickerSave");
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+      const savedTime = parsed.lastSaved || Date.now();
+      const offlineTime = Math.max(Date.now() - savedTime - 1000, 0);
+      const earnings = new Decimal(parsed.hashrate || 0).times(
+        offlineTime / 1000
+      );
+
+      setState((prev) => ({
+        ...prev,
+        sats: prev.sats.plus(earnings),
+        lastSaved: Date.now(),
+      }));
+    } catch (error) {
+      console.error("Error loading saved data:", error);
+    }
+  }, []);
 
   // Passive income
   useEffect(() => {
