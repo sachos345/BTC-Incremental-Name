@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Decimal from "decimal.js";
 import "./App.css";
 
+const dt = new Decimal(1 / 60);
+
 interface GameState {
   sats: Decimal;
   hashrate: Decimal;
@@ -174,9 +176,9 @@ function App() {
     const interval = setInterval(() => {
       setState((prev) => ({
         ...prev,
-        sats: prev.sats.plus(effectiveHashrate),
+        sats: prev.sats.plus(effectiveHashrate.times(dt)), // Proper Decimal multiplication
       }));
-    }, 1000);
+    }, 1000 * dt.toNumber()); // Convert dt to milliseconds correctly
     return () => clearInterval(interval);
   }, [effectiveHashrate]);
 
@@ -201,7 +203,7 @@ function App() {
     };
   }, [state.combo.timeout]);
 
-  // Offline earnings
+  /*// Offline earnings
   useEffect(() => {
     const offlineTime = Math.min(Date.now() - state.lastSaved, 86400000);
     const offlineEarnings = effectiveHashrate.times(offlineTime / 1000);
@@ -210,7 +212,7 @@ function App() {
       sats: prev.sats.plus(offlineEarnings),
       lastSaved: Date.now(),
     }));
-  }, []);
+  }, []);*/
 
   const handleMine = useCallback(() => {
     setState((prev) => {
