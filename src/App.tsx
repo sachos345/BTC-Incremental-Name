@@ -291,9 +291,20 @@ function App() {
         return "";
     }
   };
+  const handleReset = useCallback(() => {
+    localStorage.removeItem("btcClickerSave");
+    setState(initialState);
+  }, []);
 
   return (
     <div className="app">
+      <button
+        className="reset-button"
+        onClick={handleReset}
+        aria-label="Reset game"
+      >
+        X
+      </button>
       <h1 className="title glow-text">₿itcoin Clicker</h1>
 
       <main className="main-column">
