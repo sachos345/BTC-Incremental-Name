@@ -5,45 +5,199 @@ import "./App.css";
 
 const dt = new Decimal(1 / 60);
 
+type MinerType = keyof typeof minersConfig;
+type UpgradeType = keyof typeof upgradesConfig;
+
 interface GameState {
   sats: Decimal;
   hashrate: Decimal;
-  miners: {
-    cpu: number;
-    gpu: number;
-    asic: number;
-  };
-  upgrades: {
-    gloves: number;
-    mouse: number;
-    miningPool: number;
-    quantum: number;
-    cloud: number;
-  };
+  miners: Record<MinerType, number>;
+  upgrades: Record<UpgradeType, number>;
   lastSaved: number;
   combo: {
     multiplier: number;
-    timeout: NodeJS.Timeout | null;
+    timeout: number | null;
   };
   temporary: {
     quantumActive: boolean;
   };
 }
 
+const minersConfig = {
+  cpu: {
+    name: "CPU Miner",
+    emoji: "💻",
+    baseCost: 100,
+    costMultiplier: 1.15,
+    production: 0.1,
+    description: "Basic CPU miner generating 0.1 sat/seconds (+15% cost each)",
+  },
+  gpu: {
+    name: "GPU Farm",
+    emoji: "🎮",
+    baseCost: 500,
+    costMultiplier: 1.15,
+    production: 1,
+    description: "GPU farm generating 1 sat/seconds (+15% cost each)",
+  },
+  asic: {
+    name: "ASIC Warehouse",
+    emoji: "🏭",
+    baseCost: 5000,
+    costMultiplier: 1.15,
+    production: 10,
+    description: "ASIC warehouse generating 10 sat/seconds (+15% cost each)",
+  },
+  raspberry: {
+    name: "Raspberry Pi Cluster",
+    emoji: "🍇",
+    baseCost: 50,
+    costMultiplier: 1.12,
+    production: 0.05,
+    description:
+      "Raspberry Pi cluster generating 0.05 sat/seconds (+12% cost each)",
+  },
+  solar: {
+    name: "Solar Farm",
+    emoji: "☀️",
+    baseCost: 200,
+    costMultiplier: 1.14,
+    production: 0.4,
+    description:
+      "Solar-powered mining farm generating 0.4 sat/seconds (+14% cost each)",
+  },
+  nuclear: {
+    name: "Nuclear Plant",
+    emoji: "☢️",
+    baseCost: 1000,
+    costMultiplier: 1.16,
+    production: 2,
+    description:
+      "Nuclear-powered facility generating 2 sat/seconds (+16% cost each)",
+  },
+  satellite: {
+    name: "Orbital Satellite",
+    emoji: "🛰️",
+    baseCost: 5000,
+    costMultiplier: 1.18,
+    production: 5,
+    description:
+      "Orbital mining satellite generating 5 sat/seconds (+18% cost each)",
+  },
+  quantumAsic: {
+    name: "Quantum ASIC",
+    emoji: "⚛️",
+    baseCost: 25000,
+    costMultiplier: 1.2,
+    production: 25,
+    description:
+      "Quantum-enhanced ASIC generating 25 sat/seconds (+20% cost each)",
+  },
+  hydro: {
+    name: "Hydroelectric Rig",
+    emoji: "💧",
+    baseCost: 7500,
+    costMultiplier: 1.15,
+    production: 8,
+    description:
+      "Hydroelectric mining rig generating 8 sat/seconds (+15% cost each)",
+  },
+  geothermal: {
+    name: "Geothermal Plant",
+    emoji: "🌋",
+    baseCost: 15000,
+    costMultiplier: 1.17,
+    production: 12,
+    description: "Geothermal plant generating 12 sat/seconds (+17% cost each)",
+  },
+  wind: {
+    name: "Wind Turbine Array",
+    emoji: "🌬️",
+    baseCost: 3000,
+    costMultiplier: 1.13,
+    production: 3,
+    description: "Wind turbine array generating 3 sat/seconds (+13% cost each)",
+  },
+  dataCenter: {
+    name: "Mega Data Center",
+    emoji: "🏢",
+    baseCost: 50000,
+    costMultiplier: 1.25,
+    production: 50,
+    description:
+      "Massive data center generating 50 sat/seconds (+25% cost each)",
+  },
+  dyson: {
+    name: "Dyson Sphere",
+    emoji: "🌞",
+    baseCost: 1e6,
+    costMultiplier: 1.3,
+    production: 500,
+    description:
+      "Dyson sphere megastructure generating 500 sat/seconds (+30% cost each)",
+  },
+} as const;
+
+const upgradesConfig = {
+  gloves: {
+    name: "Click Gloves",
+    emoji: "🧤",
+    baseCost: 250,
+    costMultiplier: 1.15,
+    description: "+25% click power per level (+15% cost each)",
+  },
+  mouse: {
+    name: "Quantum Mouse",
+    emoji: "🖱️",
+    baseCost: 2500,
+    costMultiplier: 1.15,
+    description: "+1s combo duration per level (+15% cost each)",
+  },
+  miningPool: {
+    name: "Mining Pool",
+    emoji: "🌐",
+    baseCost: 10000,
+    costMultiplier: 1.2,
+    description: "+15% total hashrate per level (+20% cost each)",
+  },
+  quantum: {
+    name: "Quantum Computer",
+    emoji: "⚛️",
+    baseCost: 500000,
+    costMultiplier: 2,
+    description: "10x hashrate for 30s (cost doubles each purchase)",
+    isTemporary: true,
+  },
+  cloud: {
+    name: "Cloud Mining",
+    emoji: "☁️",
+    baseCost: 25000,
+    costMultiplier: 1.25,
+    description: "+50 flat hashrate per level (+25% cost each)",
+  },
+} as const;
+
+const initialMinersState = Object.keys(minersConfig).reduce((acc, key) => {
+  acc[key as MinerType] = 0;
+  return acc;
+}, {} as Record<MinerType, number>);
+
+const initialUpgradesState = Object.keys(upgradesConfig).reduce((acc, key) => {
+  acc[key as UpgradeType] = 0;
+  return acc;
+}, {} as Record<UpgradeType, number>);
+
 const initialState: GameState = {
   sats: new Decimal(0),
   hashrate: new Decimal(0),
-  miners: { cpu: 0, gpu: 0, asic: 0 },
-  upgrades: { gloves: 0, mouse: 0, miningPool: 0, quantum: 0, cloud: 0 },
+  miners: initialMinersState,
+  upgrades: initialUpgradesState,
   lastSaved: Date.now(),
   combo: { multiplier: 1, timeout: null },
   temporary: { quantumActive: false },
 };
 
-// Utility function to format numbers with commas
-const formatNumber = (num: Decimal) => {
-  return num.toNumber().toLocaleString("en-US");
-};
+const formatNumber = (num: Decimal) => num.toNumber().toLocaleString("en-US");
 
 function App() {
   const [state, setState] = useState<GameState>(() => {
@@ -56,19 +210,10 @@ function App() {
           ...parsed,
           sats: new Decimal(parsed.sats || 0),
           hashrate: new Decimal(parsed.hashrate || 0),
-          miners: {
-            ...initialState.miners,
-            ...(parsed.miners || {}),
-          },
-          upgrades: {
-            ...initialState.upgrades,
-            ...(parsed.upgrades || {}),
-          },
+          miners: { ...initialMinersState, ...(parsed.miners || {}) },
+          upgrades: { ...initialUpgradesState, ...(parsed.upgrades || {}) },
           lastSaved: parsed.lastSaved || Date.now(),
-          temporary: {
-            ...initialState.temporary,
-            ...(parsed.temporary || {}),
-          },
+          temporary: { ...initialState.temporary, ...(parsed.temporary || {}) },
         };
       } catch {
         return initialState;
@@ -80,33 +225,22 @@ function App() {
   const [clickFeedback, setClickFeedback] = useState<{
     amount: Decimal;
     visible: boolean;
-  }>({
-    amount: new Decimal(0),
-    visible: false,
-  });
+  }>({ amount: new Decimal(0), visible: false });
 
-  // Calculate effective hashrate with memoization
   const effectiveHashrate = useMemo(() => {
     let base = state.hashrate;
     if (state.upgrades.miningPool > 0) {
       base = base.times(new Decimal(1).plus(state.upgrades.miningPool * 0.15));
     }
     if (state.upgrades.cloud > 0) {
-      base = base.plus(state.upgrades.cloud * 50);
+      base = base.plus(new Decimal(state.upgrades.cloud * 50));
     }
     if (state.temporary.quantumActive) {
       base = base.times(10);
     }
     return base;
-  }, [
-    state.hashrate,
-    state.upgrades.miningPool,
-    state.upgrades.cloud,
-    state.temporary.quantumActive,
-  ]);
+  }, [state.hashrate, state.upgrades, state.temporary.quantumActive]);
 
-  // Save system
-  // Unified save and visibility handler
   useEffect(() => {
     const saveState = (timestamp: number) => {
       localStorage.setItem(
@@ -146,7 +280,6 @@ function App() {
     };
   }, [state, effectiveHashrate]);
 
-  // Initial load offline earnings
   useEffect(() => {
     const saved = localStorage.getItem("btcClickerSave");
     if (!saved) return;
@@ -169,18 +302,16 @@ function App() {
     }
   }, []);
 
-  // Passive income
   useEffect(() => {
     const interval = setInterval(() => {
       setState((prev) => ({
         ...prev,
-        sats: prev.sats.plus(effectiveHashrate.times(dt)), // Proper Decimal multiplication
+        sats: prev.sats.plus(effectiveHashrate.times(dt)),
       }));
-    }, 1000 * dt.toNumber()); // Convert dt to milliseconds correctly
+    }, 1000 * dt.toNumber());
     return () => clearInterval(interval);
   }, [effectiveHashrate]);
 
-  // Quantum activation timeout
   useEffect(() => {
     if (!state.temporary.quantumActive) return;
 
@@ -194,23 +325,11 @@ function App() {
     return () => clearTimeout(timeout);
   }, [state.temporary.quantumActive]);
 
-  // Cleanup combo timeout on unmount
   useEffect(() => {
     return () => {
       if (state.combo.timeout) clearTimeout(state.combo.timeout);
     };
   }, [state.combo.timeout]);
-
-  /*// Offline earnings
-  useEffect(() => {
-    const offlineTime = Math.min(Date.now() - state.lastSaved, 86400000);
-    const offlineEarnings = effectiveHashrate.times(offlineTime / 1000);
-    setState((prev) => ({
-      ...prev,
-      sats: prev.sats.plus(offlineEarnings),
-      lastSaved: Date.now(),
-    }));
-  }, []);*/
 
   const handleMine = useCallback(() => {
     setState((prev) => {
@@ -224,7 +343,7 @@ function App() {
       newCombo.multiplier = Math.min(prev.combo.multiplier + 0.1, 2);
       newCombo.timeout = setTimeout(() => {
         setState((s) => ({ ...s, combo: { ...s.combo, multiplier: 1 } }));
-      }, 500 + prev.upgrades.mouse * 1000);
+      }, 500 + prev.upgrades.mouse * 1000) as unknown as number;
 
       setClickFeedback({ amount: clickPower, visible: true });
       setTimeout(
@@ -240,107 +359,48 @@ function App() {
     });
   }, []);
 
-  const buyUpgrade = useCallback(
-    (type: keyof GameState["miners"] | keyof GameState["upgrades"]) => {
-      setState((prev) => {
-        let cost: Decimal;
-        const currentCount =
-          prev.miners[type as keyof GameState["miners"]] ||
-          prev.upgrades[type as keyof GameState["upgrades"]];
+  const buyUpgrade = useCallback((type: MinerType | UpgradeType) => {
+    setState((prev) => {
+      const isMiner = type in minersConfig;
+      const config = isMiner
+        ? minersConfig[type as MinerType]
+        : upgradesConfig[type as UpgradeType];
+      const currentCount = isMiner
+        ? prev.miners[type as MinerType]
+        : prev.upgrades[type as UpgradeType];
 
-        switch (type) {
-          case "cpu":
-            cost = new Decimal(100).mul(new Decimal(1.15).pow(prev.miners.cpu));
-            break;
-          case "gpu":
-            cost = new Decimal(500).mul(new Decimal(1.15).pow(prev.miners.gpu));
-            break;
-          case "asic":
-            cost = new Decimal(5000).mul(
-              new Decimal(1.15).pow(prev.miners.asic)
-            );
-            break;
-          case "gloves":
-            cost = new Decimal(250).mul(
-              new Decimal(1.15).pow(prev.upgrades.gloves)
-            );
-            break;
-          case "mouse":
-            cost = new Decimal(2500).mul(
-              new Decimal(1.15).pow(prev.upgrades.mouse)
-            );
-            break;
-          case "miningPool":
-            cost = new Decimal(10000).mul(
-              new Decimal(1.2).pow(prev.upgrades.miningPool)
-            );
-            break;
-          case "quantum":
-            cost = new Decimal(500000).mul(
-              new Decimal(2).pow(prev.upgrades.quantum)
-            );
-            break;
-          case "cloud":
-            cost = new Decimal(25000).mul(
-              new Decimal(1.25).pow(prev.upgrades.cloud)
-            );
-            break;
-          default:
-            return prev;
+      const cost = new Decimal(config.baseCost).times(
+        new Decimal(config.costMultiplier).pow(currentCount)
+      );
+
+      if (prev.sats.lt(cost)) return prev;
+
+      const newState = {
+        ...prev,
+        sats: prev.sats.sub(cost),
+        miners: { ...prev.miners },
+        upgrades: { ...prev.upgrades },
+        temporary: { ...prev.temporary },
+      };
+
+      if (isMiner) {
+        const minerType = type as MinerType;
+        newState.miners[minerType] += 1;
+        newState.hashrate = prev.hashrate.plus(
+          minersConfig[minerType].production
+        );
+      } else {
+        const upgradeType = type as UpgradeType;
+        newState.upgrades[upgradeType] += 1;
+        if (upgradeType === "quantum") {
+          newState.temporary.quantumActive = true;
         }
+      }
 
-        if (prev.sats.lessThan(cost)) return prev;
+      return newState;
+    });
+  }, []);
 
-        const newState = {
-          ...prev,
-          sats: prev.sats.minus(cost),
-          miners: { ...prev.miners },
-          upgrades: { ...prev.upgrades },
-          temporary: { ...prev.temporary },
-        };
-
-        if (["cpu", "gpu", "asic"].includes(type)) {
-          const minerType = type as keyof GameState["miners"];
-          newState.miners[minerType] += 1;
-          newState.hashrate = prev.hashrate.plus(
-            type === "cpu" ? 0.1 : type === "gpu" ? 1 : 10
-          );
-        } else {
-          const upgradeType = type as keyof GameState["upgrades"];
-          newState.upgrades[upgradeType] += 1;
-          if (type === "quantum") {
-            newState.temporary.quantumActive = true;
-          }
-        }
-
-        return newState;
-      });
-    },
-    []
-  );
-
-  const getUpgradeDescription = (type: string) => {
-    switch (type) {
-      case "cpu":
-        return "Basic CPU miner generating 0.1 sat/seconds (+15% cost each)";
-      case "gpu":
-        return "GPU farm generating 1 sat/seconds (+15% cost each)";
-      case "asic":
-        return "ASIC warehouse generating 10 sat/seconds (+15% cost each)";
-      case "gloves":
-        return "+25% click power per level (+15% cost each)";
-      case "mouse":
-        return "+1s combo duration per level (+15% cost each)";
-      case "miningPool":
-        return "+15% total hashrate per level (+20% cost each)";
-      case "quantum":
-        return "10x hashrate for 30s (cost doubles each purchase)";
-      case "cloud":
-        return "+50 flat hashrate per level (+25% cost each)";
-      default:
-        return "";
-    }
-  };
   const handleReset = useCallback(() => {
     localStorage.removeItem("btcClickerSave");
     setState(initialState);
@@ -394,24 +454,23 @@ function App() {
           <section className="miners-section">
             <h2>⛏️ Miners</h2>
             <div className="upgrades-grid">
-              {(["cpu", "gpu", "asic"] as const).map((type) => {
-                const cost = new Decimal(100)
-                  .mul(new Decimal(1.15).pow(state.miners[type]))
-                  .times(type === "gpu" ? 5 : type === "asic" ? 50 : 1);
+              {(Object.keys(minersConfig) as MinerType[]).map((type) => {
+                const config = minersConfig[type];
+                const cost = new Decimal(config.baseCost).times(
+                  new Decimal(config.costMultiplier).pow(state.miners[type])
+                );
                 return (
                   <button
                     key={type}
                     className="upgrade-card"
                     onClick={() => buyUpgrade(type)}
-                    disabled={state.sats.lessThan(cost)}
-                    aria-disabled={state.sats.lessThan(cost)}
+                    disabled={state.sats.lt(cost)}
+                    aria-disabled={state.sats.lt(cost)}
                   >
                     <h3>
-                      {type === "cpu" && "💻 CPU Miner"}
-                      {type === "gpu" && "🎮 GPU Farm"}
-                      {type === "asic" && "🏭 ASIC Warehouse"}
+                      {config.emoji} {config.name}
                     </h3>
-                    <p>{getUpgradeDescription(type)}</p>
+                    <p>{config.description}</p>
                     <div>Owned: {state.miners[type]}</div>
                     <div>Cost: {formatNumber(cost)} sats</div>
                   </button>
@@ -423,32 +482,29 @@ function App() {
           <section className="boost-section">
             <h2>⚡ Upgrades</h2>
             <div className="upgrades-grid">
-              {(
-                ["gloves", "mouse", "miningPool", "cloud", "quantum"] as const
-              ).map((type) => {
-                const cost = calculateCost(type, state);
+              {(Object.keys(upgradesConfig) as UpgradeType[]).map((type) => {
+                const config = upgradesConfig[type];
+                const cost = new Decimal(config.baseCost).times(
+                  new Decimal(config.costMultiplier).pow(state.upgrades[type])
+                );
                 return (
                   <button
                     key={type}
                     className="upgrade-card"
                     onClick={() => buyUpgrade(type)}
                     disabled={
-                      state.sats.lessThan(cost) ||
+                      state.sats.lt(cost) ||
                       (type === "quantum" && state.temporary.quantumActive)
                     }
                     aria-disabled={
-                      state.sats.lessThan(cost) ||
+                      state.sats.lt(cost) ||
                       (type === "quantum" && state.temporary.quantumActive)
                     }
                   >
                     <h3>
-                      {type === "gloves" && "🧤 Click Gloves"}
-                      {type === "mouse" && "🖱️ Quantum Mouse"}
-                      {type === "miningPool" && "🌐 Mining Pool"}
-                      {type === "cloud" && "☁️ Cloud Mining"}
-                      {type === "quantum" && "⚛️ Quantum Computer"}
+                      {config.emoji} {config.name}
                     </h3>
-                    <p>{getUpgradeDescription(type)}</p>
+                    <p>{config.description}</p>
                     <div>Owned: {state.upgrades[type]}</div>
                     <div>Cost: {formatNumber(cost)} sats</div>
                     {type === "quantum" && state.temporary.quantumActive && (
@@ -464,34 +520,5 @@ function App() {
     </div>
   );
 }
-
-const calculateCost = (type: string, state: GameState) => {
-  switch (type) {
-    case "cpu":
-      return new Decimal(100).mul(new Decimal(1.15).pow(state.miners.cpu));
-    case "gpu":
-      return new Decimal(500).mul(new Decimal(1.15).pow(state.miners.gpu));
-    case "asic":
-      return new Decimal(5000).mul(new Decimal(1.15).pow(state.miners.asic));
-    case "gloves":
-      return new Decimal(250).mul(new Decimal(1.15).pow(state.upgrades.gloves));
-    case "mouse":
-      return new Decimal(2500).mul(new Decimal(1.15).pow(state.upgrades.mouse));
-    case "miningPool":
-      return new Decimal(10000).mul(
-        new Decimal(1.2).pow(state.upgrades.miningPool)
-      );
-    case "quantum":
-      return new Decimal(500000).mul(
-        new Decimal(2).pow(state.upgrades.quantum)
-      );
-    case "cloud":
-      return new Decimal(25000).mul(
-        new Decimal(1.25).pow(state.upgrades.cloud)
-      );
-    default:
-      return new Decimal(0);
-  }
-};
 
 export default App;
