@@ -1,16 +1,15 @@
 // App.tsx
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Decimal from "decimal.js";
 import "./App.css";
 
-const dt = new Decimal(1 / 60);
+const dt = 1 / 60;
 
 type MinerType = keyof typeof minersConfig;
 type UpgradeType = keyof typeof upgradesConfig;
 
 interface GameState {
-  sats: Decimal;
-  hashrate: Decimal;
+  sats: number;
+  hashrate: number;
   miners: Record<MinerType, number>;
   upgrades: Record<UpgradeType, number>;
   lastSaved: number;
@@ -188,8 +187,8 @@ const initialUpgradesState = Object.keys(upgradesConfig).reduce((acc, key) => {
 }, {} as Record<UpgradeType, number>);
 
 const initialState: GameState = {
-  sats: new Decimal(0),
-  hashrate: new Decimal(0),
+  sats: 0,
+  hashrate: 0,
   miners: initialMinersState,
   upgrades: initialUpgradesState,
   lastSaved: Date.now(),
@@ -197,7 +196,7 @@ const initialState: GameState = {
   temporary: { quantumActive: false },
 };
 
-const formatNumber = (num: Decimal) => num.toNumber().toLocaleString("en-US");
+const formatNumber = (num: number) => num.toLocaleString("en-US");
 
 function App() {
   const [state, setState] = useState<GameState>(() => {
@@ -208,8 +207,8 @@ function App() {
         return {
           ...initialState,
           ...parsed,
-          sats: new Decimal(parsed.sats || 0),
-          hashrate: new Decimal(parsed.hashrate || 0),
+          sats: parsed.sats || 0,
+          hashrate: parsed.hashrate || 0,
           miners: { ...initialMinersState, ...(parsed.miners || {}) },
           upgrades: { ...initialUpgradesState, ...(parsed.upgrades || {}) },
           lastSaved: parsed.lastSaved || Date.now(),
@@ -223,20 +222,20 @@ function App() {
   });
 
   const [clickFeedback, setClickFeedback] = useState<{
-    amount: Decimal;
+    amount: number;
     visible: boolean;
-  }>({ amount: new Decimal(0), visible: false });
+  }>({ amount: 0, visible: false });
 
   const effectiveHashrate = useMemo(() => {
     let base = state.hashrate;
     if (state.upgrades.miningPool > 0) {
-      base = base.times(new Decimal(1).plus(state.upgrades.miningPool * 0.15));
+      base *= 1 + state.upgrades.miningPool * 0.15;
     }
     if (state.upgrades.cloud > 0) {
-      base = base.plus(new Decimal(state.upgrades.cloud * 50));
+      base += state.upgrades.cloud * 50;
     }
     if (state.temporary.quantumActive) {
-      base = base.times(10);
+      base *= 10;
     }
     return base;
   }, [state.hashrate, state.upgrades, state.temporary.quantumActive]);
@@ -247,8 +246,8 @@ function App() {
         "btcClickerSave",
         JSON.stringify({
           ...state,
-          sats: state.sats.toString(),
-          hashrate: state.hashrate.toString(),
+          sats: state.sats,
+          hashrate: state.hashrate,
           lastSaved: timestamp,
           combo: { multiplier: 1, timeout: null },
         })
@@ -264,7 +263,7 @@ function App() {
         const offlineTime = Math.max(now - state.lastSaved - 1000, 0);
         setState((prev) => ({
           ...prev,
-          sats: prev.sats.plus(effectiveHashrate.times(offlineTime / 1000)),
+          sats: prev.sats + effectiveHashrate * (offlineTime / 1000),
           lastSaved: now,
         }));
       }
@@ -288,13 +287,11 @@ function App() {
       const parsed = JSON.parse(saved);
       const savedTime = parsed.lastSaved || Date.now();
       const offlineTime = Math.max(Date.now() - savedTime - 1000, 0);
-      const earnings = new Decimal(parsed.hashrate || 0).times(
-        offlineTime / 1000
-      );
+      const earnings = (parsed.hashrate || 0) * (offlineTime / 1000);
 
       setState((prev) => ({
         ...prev,
-        sats: prev.sats.plus(earnings),
+        sats: prev.sats + earnings,
         lastSaved: Date.now(),
       }));
     } catch (error) {
@@ -306,9 +303,9 @@ function App() {
     const interval = setInterval(() => {
       setState((prev) => ({
         ...prev,
-        sats: prev.sats.plus(effectiveHashrate.times(dt)),
+        sats: prev.sats + effectiveHashrate * dt,
       }));
-    }, 1000 * dt.toNumber());
+    }, 1000 * dt);
     return () => clearInterval(interval);
   }, [effectiveHashrate]);
 
@@ -333,9 +330,8 @@ function App() {
 
   const handleMine = useCallback(() => {
     setState((prev) => {
-      const clickPower = new Decimal(1)
-        .times(new Decimal(1).plus(prev.upgrades.gloves * 0.25))
-        .times(prev.combo.multiplier);
+      const clickPower =
+        1 * (1 + prev.upgrades.gloves * 0.25) * prev.combo.multiplier;
 
       const newCombo = { ...prev.combo };
       if (newCombo.timeout) clearTimeout(newCombo.timeout);
@@ -353,7 +349,7 @@ function App() {
 
       return {
         ...prev,
-        sats: prev.sats.plus(clickPower),
+        sats: prev.sats + clickPower,
         combo: newCombo,
       };
     });
@@ -369,15 +365,14 @@ function App() {
         ? prev.miners[type as MinerType]
         : prev.upgrades[type as UpgradeType];
 
-      const cost = new Decimal(config.baseCost).times(
-        new Decimal(config.costMultiplier).pow(currentCount)
-      );
+      const cost =
+        config.baseCost * Math.pow(config.costMultiplier, currentCount);
 
-      if (prev.sats.lt(cost)) return prev;
+      if (prev.sats < cost) return prev;
 
       const newState = {
         ...prev,
-        sats: prev.sats.sub(cost),
+        sats: prev.sats - cost,
         miners: { ...prev.miners },
         upgrades: { ...prev.upgrades },
         temporary: { ...prev.temporary },
@@ -386,9 +381,7 @@ function App() {
       if (isMiner) {
         const minerType = type as MinerType;
         newState.miners[minerType] += 1;
-        newState.hashrate = prev.hashrate.plus(
-          minersConfig[minerType].production
-        );
+        newState.hashrate = prev.hashrate + minersConfig[minerType].production;
       } else {
         const upgradeType = type as UpgradeType;
         newState.upgrades[upgradeType] += 1;
@@ -456,16 +449,16 @@ function App() {
             <div className="upgrades-grid">
               {(Object.keys(minersConfig) as MinerType[]).map((type) => {
                 const config = minersConfig[type];
-                const cost = new Decimal(config.baseCost).times(
-                  new Decimal(config.costMultiplier).pow(state.miners[type])
-                );
+                const cost =
+                  config.baseCost *
+                  Math.pow(config.costMultiplier, state.miners[type]);
                 return (
                   <button
                     key={type}
                     className="upgrade-card"
                     onClick={() => buyUpgrade(type)}
-                    disabled={state.sats.lt(cost)}
-                    aria-disabled={state.sats.lt(cost)}
+                    disabled={state.sats < cost}
+                    aria-disabled={state.sats < cost}
                   >
                     <h3>
                       {config.emoji} {config.name}
@@ -484,20 +477,20 @@ function App() {
             <div className="upgrades-grid">
               {(Object.keys(upgradesConfig) as UpgradeType[]).map((type) => {
                 const config = upgradesConfig[type];
-                const cost = new Decimal(config.baseCost).times(
-                  new Decimal(config.costMultiplier).pow(state.upgrades[type])
-                );
+                const cost =
+                  config.baseCost *
+                  Math.pow(config.costMultiplier, state.upgrades[type]);
                 return (
                   <button
                     key={type}
                     className="upgrade-card"
                     onClick={() => buyUpgrade(type)}
                     disabled={
-                      state.sats.lt(cost) ||
+                      state.sats < cost ||
                       (type === "quantum" && state.temporary.quantumActive)
                     }
                     aria-disabled={
-                      state.sats.lt(cost) ||
+                      state.sats < cost ||
                       (type === "quantum" && state.temporary.quantumActive)
                     }
                   >
