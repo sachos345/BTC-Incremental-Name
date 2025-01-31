@@ -20,6 +20,7 @@ interface GameState {
   temporary: {
     quantumActive: boolean;
   };
+  unlockedMinerIndex: number;
 }
 
 const minersConfig = {
@@ -337,7 +338,11 @@ const initialState: GameState = {
   lastSaved: Date.now(),
   combo: { multiplier: 1, timeout: null },
   temporary: { quantumActive: false },
+  unlockedMinerIndex: 3, // Show first 4 miners
 };
+
+// Add miners order array (top of component)
+const minersOrder = Object.keys(minersConfig) as MinerType[];
 
 const formatNumber = (num: number) => num.toLocaleString("en-US");
 
@@ -525,6 +530,14 @@ function App() {
         const minerType = type as MinerType;
         newState.miners[minerType] += 1;
         newState.hashrate = prev.hashrate + minersConfig[minerType].production;
+        // Unlock next miner if purchasing the current last one
+        const purchasedIndex = minersOrder.indexOf(minerType);
+        if (purchasedIndex === prev.unlockedMinerIndex) {
+          newState.unlockedMinerIndex = Math.min(
+            prev.unlockedMinerIndex + 1,
+            minersOrder.length - 1
+          );
+        }
       } else {
         const upgradeType = type as UpgradeType;
         newState.upgrades[upgradeType] += 1;
@@ -590,28 +603,33 @@ function App() {
           <section className="miners-section">
             <h2>⛏️ Miners</h2>
             <div className="upgrades-grid">
-              {(Object.keys(minersConfig) as MinerType[]).map((type) => {
-                const config = minersConfig[type];
-                const cost =
-                  config.baseCost *
-                  Math.pow(config.costMultiplier, state.miners[type]);
-                return (
-                  <button
-                    key={type}
-                    className="upgrade-card"
-                    onClick={() => buyUpgrade(type)}
-                    disabled={state.sats < cost}
-                    aria-disabled={state.sats < cost}
-                  >
-                    <h3>
-                      {config.emoji} {config.name}
-                    </h3>
-                    <p>{config.description}</p>
-                    <div>Owned: {state.miners[type]}</div>
-                    <div>Cost: {formatNumber(cost)} sats</div>
-                  </button>
-                );
-              })}
+              {minersOrder
+                .slice(0, state.unlockedMinerIndex + 1)
+                .map((type) => {
+                  const config = minersConfig[type];
+                  const cost =
+                    config.baseCost *
+                    Math.pow(config.costMultiplier, state.miners[type]);
+                  const production = state.miners[type] * config.production;
+
+                  return (
+                    <button
+                      key={type}
+                      className="upgrade-card"
+                      onClick={() => buyUpgrade(type)}
+                      disabled={state.sats < cost}
+                      aria-disabled={state.sats < cost}
+                    >
+                      <h3>
+                        {config.emoji} {config.name}
+                      </h3>
+                      <p>{config.description}</p>
+                      <div>Owned: {state.miners[type]}</div>
+                      <div>Production: {formatNumber(production)}/s</div>
+                      <div>Cost: {formatNumber(cost)} sats</div>
+                    </button>
+                  );
+                })}
             </div>
           </section>
 
